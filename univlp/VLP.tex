@@ -170,7 +170,11 @@
                   \hline
             \end{tabularx}%
 
+
       \end{table*}%
+
+      网络的输入包括图像（区域）和相关/目标标题。我们将每个输入图像表示为从Visual Genome（Krishna et al. 2017; Anderson et al. 2018）预训练的Faster RCNN的变体中提取的100个对象区域。我们将来自fc6层的模型输出作为区域特征（Ri），将1600个对象类别上的类别似然性作为区域对象标签（Ci）
+
       \centerline{\textbf{Vision-Language Transformer Network}}
 
       The model input consists of the classaware region embedding, word embedding and three special tokens. The region embedding is defined as:
@@ -233,6 +237,20 @@
 
       用于双向目标的掩码允许视觉模态和语言模态之间的无限制的消息传递，而在seq2seq中，待预测的单词不能参考未来的单词，即它满足自回归性质。
 
+      \begin{table*}[!htbp]
+            \renewcommand\arraystretch{2}
+
+            \centering
+            %\caption{A table with line breaks}
+            \begin{tabularx}{\textwidth}{|X|}
+                  \hline
+                  什么是自回归？
+                  \\
+                  \hline
+            \end{tabularx}%
+
+      \end{table*}%
+
       we define the input to the first Transformer block as:
       \begin{equation}
             H_0 = [r_{[CLS]}, r_1, \dots, r_N, y_{[SEP]}, y_1, \dots, y_T, y_{[STOP]}] \in R^{d \times U},where U=N+T+3
@@ -263,8 +281,16 @@
 
       \begin{figure}[h]
             \includegraphics[scale=0.5]{image}
-            \caption{Model architecture for pre-training. The input comprises of image input, sentence input, and three special tokens ([CLS], [SEP], [STOP]). The image is processed as N Region of Interests (RoIs) and region features are extracted according to Eq\ref{ri} The sentence is tokenized and masked with [MASK] tokens for the later masked language modeling task. Our Unified Encoder-Decoder consists of 12 layers of Transformer blocks, each having a masked self-attention layer and feed-forward module, where the self-attention mask controls what input context the prediction conditions on. We implemented two selfattention masks depending on whether the objective is bidirectional or seq2seq. Better viewed in color.}
+            \caption{预训练的模型架构。输入包括图像输入、句子输入和三个特殊标记（[CLS]、[SEP]、[STOP]）。图像被处理为 N 个感兴趣区域（RoIs），并根据式\ref{ri}提取区域特征。 1. 将句子标记化并用 [MASK] 标记进行掩码，以供后续掩码语言建模任务使用。我们的统一编码器-解码器由 12 层 Transformer 块组成，每个层都有一个屏蔽自注意力层和前馈模块，其中自注意力屏蔽控制预测条件的输入上下文。我们根据目标是双向还是 seq2seq 实现了两个自注意力掩码。}
             \label{procedure}
+      \end{figure}
+
+
+      \begin{figure}[h]
+            \centering
+            \includegraphics[scale=0.5]{uniml}
+            \caption{Overview of unified LM pre-training. The model parameters are shared across the LM objectives (i.e., bidirectional LM, unidirectional LM, and sequence-to-sequence LM). We use different self-attention masks to control the access to context for each word token. }
+            \label{uniml}
       \end{figure}
 
       为简单起见，我们假设自注意力模块中只有一个注意力头。然后，对于$H^{l-1}$的自注意力输出可以表示为：
@@ -277,6 +303,56 @@
       $A_l$ is further encoded by a feed-forward layer with a residual connection to form the output $H_l$
 
 
+      \newpage
+      \begin{lstlisting}
+      class BertSelfAttention(nn.Module):
+            def __init__(self, config):
+                  super(BertSelfAttention, self).__init__()
+                 
+                  self.query = nn.Linear(config.hidden_size, self.all_head_size)
+                  self.key = nn.Linear(config.hidden_size, self.all_head_size)
+                  self.value = nn.Linear(config.hidden_size, self.all_head_size)
+
+                  self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+
+            def transpose_for_scores(self, x):
+                  new_x_shape = x.size()[
+                  :-1] + (self.num_attention_heads, self.attention_head_size)
+                  x = x.view(*new_x_shape)
+                  return x.permute(0, 2, 1, 3)
+
+            def forward(self, hidden_states, attention_mask, history_states=None):
+                  #只保留了部分代码
+                  mixed_query_layer = self.query(hidden_states)
+                  mixed_key_layer = self.key(hidden_states)
+                  mixed_value_layer = self.value(hidden_states)
+
+                  query_layer = self.transpose_for_scores(mixed_query_layer)
+                  key_layer = self.transpose_for_scores(mixed_key_layer)
+                  value_layer = self.transpose_for_scores(mixed_value_layer)
+
+                  # Take the dot product between "query" and "key" to get the raw attention scores.
+                  attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+
+                  attention_scores = attention_scores /math.sqrt(self.attention_head_size)
+
+                  # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
+                  attention_scores = attention_scores + attention_mask
+
+                  # Normalize the attention scores to probabilities.
+                  attention_probs = nn.Softmax(dim=-1)(attention_scores)
+
+                  # This is actually dropping out entire tokens to attend to, which might
+                  # seem a bit unusual, but is taken from the original Transformer paper.
+                  attention_probs = self.dropout(attention_probs)
+
+                  context_layer = torch.matmul(attention_probs, value_layer)
+                  context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+                  new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+                  context_layer = context_layer.view(*new_context_layer_shape)
+                  return context_layer
+      \end{lstlisting}
+
       \textit{上文的循环迭代$H_l$是由$A_l$来的吗}
 
       incorporating the region class probabilities ($C_i$) into region feature ($r_i$)
@@ -288,7 +364,15 @@
 
       \centerline{\textbf{Fine-Tuning for Downstream Tasks}}
 
+      我们使用seq2seq目标对预训练的VLP模型在目标数据集上进行微调。在推理过程中，我们首先对图像区域进行编码，同时包括特殊的[CLS]和[SEP]标记，然后通过输入一个[MASK]标记开始生成，并从单词概率输出中抽样一个单词（例如，贪婪抽样）。然后，将前一个输入序列中的[MASK]标记替换为抽样的单词，并在输入序列中追加一个新的[MASK]标记以触发下一个预测。当选择[STOP]标记时，生成终止。其他推理方法如束搜索也可以应用。
 
+      在微调过程中，学习了一个多层感知器（线性+ReLU+线性+Sigmoid），位于[CLS]和[SEP]的最后隐藏状态的元素级乘积之上，类似于（Lu等人，2019年）。我们使用交叉熵损失函数优化模型输出分数，相对于软答案标签。需要注意的是，与（Tan和Bansal，2019年）不同的是，在预训练期间利用了目标数据集（通过密集的人工注释），我们的预训练不需要这个要求，因此更加通用。
+
+      \centerline{\textbf{Implementation details}}
+
+      实现细节。我们的Transformer骨干网络与BERT-base（Devlin et al. 2018）相同。网络的输入包括图像（区域）和相关/目标标题。我们将每个输入图像表示为从Visual Genome（Krishna et al. 2017; Anderson et al. 2018）预训练的Faster RCNN的变体中提取的100个对象区域。我们将来自fc6层的模型输出作为区域特征（Ri），将1600个对象类别上的类别似然性作为区域对象标签（Ci）。值得注意的是，如果没有特别说明，我们BERT模型中的权重是从仅在文本语料库上预训练的UniLM（Dong et al. 2019）中初始化的。对于标题推断，我们在验证集上使用贪婪搜索，在测试集上使用beam search，并将beam大小设置为5。我们使用附录中呈现的配置执行轻量级模型超参数搜索。通过轻量级模型验证，将λ设置为0.75用于CC预训练（取自{0.25, 0.5, 0.75}），并将其设置为1用于图像字幕（即完全seq2seq），将其设置为0用于VQA（即完全双向）。
+
+      模型变种和评估指标。为了展示我们的视觉语言预训练的有效性，我们首先包括一个没有这种预训练的基准模型。然后，我们包括两个极端设置的模型，其中λ =1（仅seq2seq预训练）和λ =0（仅双向预训练），以研究每个目标如何单独与不同的下游任务配合工作。我们的完整模型对两个目标进行联合训练。无论预训练配置如何，微调过程都是相同的。关于评估指标，我们对图像字幕使用标准的语言指标，包括Bleu@4、METEOR、CIDEr和SPICE，对VQA则使用官方的准确率测量，涵盖Yes/No、Number和Other等不同类型的答案。
 
       \section{Summary}
 
