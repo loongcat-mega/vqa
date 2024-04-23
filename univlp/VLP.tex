@@ -1,14 +1,15 @@
 %\documentclass{beamer}
-\documentclass{article}
+\documentclass[a4paper]{article}
 % \documentclass[10pt]{article}
 
-
+\usepackage{float}
 \usepackage{ctex}
 \usepackage{graphicx} 
 \usepackage{geometry}
 \usepackage{tikz}
 \usepackage{amsmath}
 \usepackage{setspace}
+\usepackage{subcaption}
 % for table
 \usepackage{tabularx}
 
@@ -81,10 +82,21 @@
 
       \section{Abstract}
 
-      本文介绍了一种统一的视觉语言预训练(VLP)模型。该模型的统一性表现在：(1)它可以针对视觉语言生成(例如图像描述)或理解(例如视觉问答)任务进行微调；(2)它使用了一个共享的多层Transformer网络进行编码和解码,这与许多现有方法不同,后者使用分离的模型实现编码器和解码器。统一的VLP模型使用无监督学习目标对大量图像文本对进行预训练,这两个任务是双向和序列到序列(seq2seq)掩码视觉语言预测。这两个任务的不同之处仅在于预测条件所在的上下文。这是通过利用特定的自注意力掩码来控制共享Transformer网络实现的。据我们所知,VLP是第一个在图像描述和视觉问答等截然不同的视觉语言生成和理解任务上均取得最先进结果的模型,在三个具有挑战性的基准数据集上(COCO Captions、Flickr30k Captions和VQA 2.0)都表现出色。代码和预训练模型可在https://github.com/LuoweiZhou/VLP找到。
+      本文介绍了一种统一的视觉语言预训练(VLP)模型。该模型的统一性表现在:
+
+      \begin{enumerate}
+            \item 它可以针对视觉语言生成(例如图像描述)或理解(例如视觉问答)任务进行微调
+            \item 它使用了一个共享的多层Transformer网络进行编码和解码
+      \end{enumerate}
+
+      许多现有方法不同使用分离的模型实现编码器和解码器。
+
+      统一的VLP模型使用无监督学习目标对大量图像文本对进行预训练,这两个任务是双向(Bidirectional)和序列到序列(seq2seq)掩码视觉语言预测。这两个任务的不同之处仅在于预测条件所在的上下文。这是通过利用特定的自注意力掩码来控制共享Transformer网络实现的.
+
+      据我们所知,VLP是第一个在图像描述和视觉问答等截然不同的视觉语言生成和理解任务上均取得最先进结果的模型,在三个具有挑战性的基准数据集上(COCO Captions、Flickr30k Captions和VQA 2.0)都表现出色。代码和预训练模型可在https://github.com/LuoweiZhou/VLP找到。
       \section{Introduction}
 
-      一些值得思考的东西：
+      %一些值得思考的东西：
       \begin{itemize}
             \item bidirectional and sequence to sequence (seq2seq) masked language prediction是什么
                   \begin{itemize}
@@ -96,6 +108,11 @@
                   \end{itemize}
             \item 只有encoder的模型的优缺点？en-de模型对比单en的好处？
 
+                  decoder-only：把输入的内容看成自己已经生成的内容，基于已经生成的内容再去生成
+
+                  %CBOW？用其他词去合成目标词
+
+                  %skip-gram?
       \end{itemize}
 
 
@@ -110,7 +127,13 @@
       针对不同任务有不同的模型，此外，有许多模型只训练了encoder，并没有对decoder做预训练，会导致encoder的输出与decoder所需要的输入有差异。因此要训练一个统一的编码、解码表示。
 
 
-      提出的VLP与表1中基于BERT的模型相比有两个主要优势。首先，VLP统一了编码器和解码器，学习了更通用的上下文化视觉语言表示，可以更容易地进行视觉语言生成和理解任务的微调，如图像描述和VQA等。其次，统一的预训练流程为两种不同的视觉语言预测任务提供了单一的模型架构，即双向和序列到序列，减轻了不同类型任务的多个预训练模型的需求，而不会在任务特定指标上产生显著的性能损失。
+      提出的VLP与基于BERT的模型相比有两个主要优势:
+      \begin{enumerate}
+            \item VLP统一了编码器和解码器，学习了更通用的上下文化视觉语言表示，可以更容易地进行视觉语言生成和理解任务的微调，如图像描述和VQA等
+            \item 统一的预训练流程为两种不同的视觉语言预测任务提供了单一的模型架构，即双向和序列到序列，减轻了不同类型任务的多个预训练模型的需求，而不会在任务特定指标上产生显著的性能损失
+      \end{enumerate}
+
+
       \begin{table*}[!htbp]
             \renewcommand\arraystretch{2}
 
@@ -144,9 +167,9 @@
 
       \end{table*}%
 
-      Vision-Language Pre-training  : 这已经成为视觉语言社区中一个新兴的研究领域。相关工作包括ViLBERT（Lu等，2019年）和LXMERT（Tan和Bansal，2019年），它们都仅处理基于理解的任务（例如，VQA和检索），并共享相同的双流BERT框架，其中包含一个视觉语言共注意力模块，用于融合两种模态的信息。ViLBERT在包括VQA、指称表达和图像到文本检索在内的各种下游任务上进行了测试。LXMERT仅专注于特定的问题空间（即，VQA和视觉推理），当下游任务的数据集在预训练阶段也被利用时，其泛化能力进一步受到了影响。与我们工作最相似的是VideoBERT（Sun等，2019b年），它处理了生成型任务（例如，视频描述）和理解型任务（例如，动作分类）。然而，它分离了视觉编码器和语言解码器，并且仅在编码器上进行预训练，使解码器未初始化。相比之下，我们提出了一个统一的模型用于编码和解码，并充分利用了预训练的好处。
+      %Vision-Language Pre-training  : 这已经成为视觉语言社区中一个新兴的研究领域。相关工作包括ViLBERT（Lu等，2019年）和LXMERT（Tan和Bansal，2019年），它们都仅处理基于理解的任务（例如，VQA和检索），并共享相同的双流BERT框架，其中包含一个视觉语言共注意力模块，用于融合两种模态的信息。ViLBERT在包括VQA、指称表达和图像到文本检索在内的各种下游任务上进行了测试。LXMERT仅专注于特定的问题空间（即，VQA和视觉推理），当下游任务的数据集在预训练阶段也被利用时，其泛化能力进一步受到了影响。与我们工作最相似的是VideoBERT（Sun等，2019b年），它处理了生成型任务（例如，视频描述）和理解型任务（例如，动作分类）。然而，它分离了视觉编码器和语言解码器，并且仅在编码器上进行预训练，使解码器未初始化。相比之下，我们提出了一个统一的模型用于编码和解码，并充分利用了预训练的好处。
 
-      Image Captioning \& VQA :。最近关于图像描述的大部分工作都建立在（Anderson等人，2018年）的基础上，其中一个语言模型通过动态地关注从预训练对象检测器中提取的图像对象区域来获取生成句子的线索。后续的工作进一步通过使用图卷积网络（GCNs）（Yao等人，2018年）、结合语言归纳偏差（Yang等人，2019年）或强化图像和文本之间的区域对齐（Lu等人，2018年；Zhou等人，2019年）来捕获对象区域之间的关系。VQA是视觉和语言中另一个流行的研究领域。自其最初的提出（Antol等人，2015年）以来，已经有大量的工作提出了模型架构来融合问题和图像表示（Kim，Jun和Zhang，2018年；Anderson等人，2018年；Gao等人，2019年），提出了新的数据集或模型来减少数据集偏差（Zhang等人，2016年；Goyal等人，2017年；Agrawal等人，2017年）并在问题中对答案进行了基本的地面化（Lewis和Fan，2019年）。我们使用我们的基础架构来执行图像描述和VQA，只有轻微的模型结构差异。
+      %Image Captioning \& VQA :。最近关于图像描述的大部分工作都建立在（Anderson等人，2018年）的基础上，其中一个语言模型通过动态地关注从预训练对象检测器中提取的图像对象区域来获取生成句子的线索。后续的工作进一步通过使用图卷积网络（GCNs）（Yao等人，2018年）、结合语言归纳偏差（Yang等人，2019年）或强化图像和文本之间的区域对齐（Lu等人，2018年；Zhou等人，2019年）来捕获对象区域之间的关系。VQA是视觉和语言中另一个流行的研究领域。自其最初的提出（Antol等人，2015年）以来，已经有大量的工作提出了模型架构来融合问题和图像表示（Kim，Jun和Zhang，2018年；Anderson等人，2018年；Gao等人，2019年），提出了新的数据集或模型来减少数据集偏差（Zhang等人，2016年；Goyal等人，2017年；Agrawal等人，2017年）并在问题中对答案进行了基本的地面化（Lewis和Fan，2019年）。我们使用我们的基础架构来执行图像描述和VQA，只有轻微的模型结构差异。
 
       \centerline{\textbf{Vision-Language Pre-training}}
 
@@ -157,23 +180,23 @@
             \item object lable,$C_i \in R^{l \times N}$,l:object class
             \item geometric information,$G_i \in R^{o \times N}$,o:left-top,right-bottom,Related area
       \end{itemize}
-      \begin{table*}[!htbp]
-            \renewcommand\arraystretch{2}
+      % \begin{table*}[!htbp]
+      %       \renewcommand\arraystretch{2}
 
-            \centering
-            %\caption{A table with line breaks}
-            \begin{tabularx}{\textwidth}{|X|}
-                  \hline
-                  feature是由谁来提取的？ \\
-                  提取的是什么信息？
-                  \\
-                  \hline
-            \end{tabularx}%
+      %       \centering
+      %       %\caption{A table with line breaks}
+      %       \begin{tabularx}{\textwidth}{|X|}
+      %             \hline
+      %             feature是由谁来提取的？ \\
+      %             提取的是什么信息？
+      %             \\
+      %             \hline
+      %       \end{tabularx}%
 
 
-      \end{table*}%
+      % \end{table*}%
 
-      网络的输入包括图像（区域）和相关/目标标题。我们将每个输入图像表示为从Visual Genome（Krishna et al. 2017; Anderson et al. 2018）预训练的Faster RCNN的变体中提取的100个对象区域。我们将来自fc6层的模型输出作为区域特征（Ri），将1600个对象类别上的类别似然性作为区域对象标签（Ci）
+      网络的输入包括图像（区域）和相关/目标文本。我们将每个输入图像表示为从Visual Genome（Krishna et al. 2017; Anderson et al. 2018）预训练的Faster RCNN的变体中提取的100个对象区域。我们将来自fc6层的模型输出作为区域特征（$R_i$），将1600个对象类别上的类别可能性作为区域对象标签（$C_i$）
 
       \centerline{\textbf{Vision-Language Transformer Network}}
 
@@ -188,8 +211,6 @@
       the word embedding 与Bert一致
 
       Tokens:
-
-
       \begin{itemize}
             \item CLS:start the  visual input
             \item SEP:boundary of the visual and sentence input
@@ -216,7 +237,7 @@
             \begin{tabularx}{\textwidth}{|X|}
                   \hline
 
-                  \indent 以这种方式屏蔽标记会在预训练和微调之间产生差异。即，我们训练BERT通过预测[MASK]标记。训练完之后，我们可以为下游任务微调预训练的BERT模型，比如情感分析任务。但在微调期间，我们的输入不会有任何的[MASK]标记。因此，它会导致 BERT 的预训练方式与微调方式不匹配
+                  \indent 如果选中即Mask会在预训练和微调之间产生差异。即，我们训练BERT通过预测[MASK]标记。训练完之后，我们可以为下游任务微调预训练的BERT模型，比如情感分析任务。但在微调期间，我们的输入不会有任何的[MASK]标记。因此，它会导致 BERT 的预训练方式与微调方式不匹配
                   所以才会有8 1 1的比例 \\
                   \hline
             \end{tabularx}%
@@ -281,7 +302,7 @@
 
       \begin{figure}[h]
             \includegraphics[scale=0.5]{image}
-            \caption{预训练的模型架构。输入包括图像输入、句子输入和三个特殊标记（[CLS]、[SEP]、[STOP]）。图像被处理为 N 个感兴趣区域（RoIs），并根据式\ref{ri}提取区域特征。 1. 将句子标记化并用 [MASK] 标记进行掩码，以供后续掩码语言建模任务使用。我们的统一编码器-解码器由 12 层 Transformer 块组成，每个层都有一个屏蔽自注意力层和前馈模块，其中自注意力屏蔽控制预测条件的输入上下文。我们根据目标是双向还是 seq2seq 实现了两个自注意力掩码。}
+            \caption{预训练的模型架构。输入包括图像输入、句子输入和三个特殊标记（[CLS]、[SEP]、[STOP]）。图像被处理为 N 个感兴趣区域（RoIs），并根据式\ref{ri}提取区域特征。将句子标记化并用 [MASK] 标记进行掩码，以供后续掩码语言建模任务使用。我们的统一编码器-解码器由 12 层 Transformer 块组成，每个层都有一个屏蔽自注意力层和前馈模块，其中自注意力屏蔽控制预测条件的输入上下文。我们根据目标是双向还是 seq2seq 实现了两个自注意力掩码。}
             \label{procedure}
       \end{figure}
 
@@ -303,61 +324,14 @@
       $A_l$ is further encoded by a feed-forward layer with a residual connection to form the output $H_l$
 
 
-      \newpage
-      \begin{lstlisting}
-      class BertSelfAttention(nn.Module):
-            def __init__(self, config):
-                  super(BertSelfAttention, self).__init__()
-                 
-                  self.query = nn.Linear(config.hidden_size, self.all_head_size)
-                  self.key = nn.Linear(config.hidden_size, self.all_head_size)
-                  self.value = nn.Linear(config.hidden_size, self.all_head_size)
+      %\newpage
 
-                  self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-            def transpose_for_scores(self, x):
-                  new_x_shape = x.size()[
-                  :-1] + (self.num_attention_heads, self.attention_head_size)
-                  x = x.view(*new_x_shape)
-                  return x.permute(0, 2, 1, 3)
-
-            def forward(self, hidden_states, attention_mask, history_states=None):
-                  #只保留了部分代码
-                  mixed_query_layer = self.query(hidden_states)
-                  mixed_key_layer = self.key(hidden_states)
-                  mixed_value_layer = self.value(hidden_states)
-
-                  query_layer = self.transpose_for_scores(mixed_query_layer)
-                  key_layer = self.transpose_for_scores(mixed_key_layer)
-                  value_layer = self.transpose_for_scores(mixed_value_layer)
-
-                  # Take the dot product between "query" and "key" to get the raw attention scores.
-                  attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-
-                  attention_scores = attention_scores /math.sqrt(self.attention_head_size)
-
-                  # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
-                  attention_scores = attention_scores + attention_mask
-
-                  # Normalize the attention scores to probabilities.
-                  attention_probs = nn.Softmax(dim=-1)(attention_scores)
-
-                  # This is actually dropping out entire tokens to attend to, which might
-                  # seem a bit unusual, but is taken from the original Transformer paper.
-                  attention_probs = self.dropout(attention_probs)
-
-                  context_layer = torch.matmul(attention_probs, value_layer)
-                  context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-                  new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-                  context_layer = context_layer.view(*new_context_layer_shape)
-                  return context_layer
-      \end{lstlisting}
-
-      \textit{上文的循环迭代$H_l$是由$A_l$来的吗}
+      %\textit{上文的循环迭代$H_l$是由$A_l$来的吗}
 
       incorporating the region class probabilities ($C_i$) into region feature ($r_i$)
 
-      \textit{将类别与区域特征融合,这个融合是向量相加还是向量维度的增加？}
+      %\textit{将类别与区域特征融合,这个融合是向量相加还是向量维度的增加？}
 
       因此，与现有工作不同，其中使用屏蔽区域预测任务来优化视觉表示，我们通过将其用于屏蔽语言重构来间接优化视觉表示。我们还选择不像BERT中那样使用下一句预测任务，或者在我们的背景下预测图像和文本之间的对应关系，因为该任务不仅比seq2seq或双向任务弱，而且计算成本高。这恰巧与RoBERTa（Liu等人，2019b年）的一项并行工作相吻合。
 
@@ -377,6 +351,142 @@
       \section{Summary}
 
       本文提出了一种统一的视觉-语言预训练（VLP）模型，可以对视觉-语言生成和理解任务进行微调。该模型基于两个目标在大量图像文本对上进行了预训练：双向和seq2seq视觉-语言预测。这两个不同的目标在相同的架构下通过参数共享实现，避免了为不同类型的下游任务（即基于生成或理解的任务）需要单独的预训练模型。在我们对图像字幕和VQA任务的综合实验中，我们证明了大规模无监督的预训练可以显著加速下游任务的学习并提高模型准确性。此外，与具有单独预训练模型相比，我们的统一模型结合了从不同目标学习到的表示，并在所有下游任务上产生了稍微有所妥协但不错（SotA）的准确性。在我们的未来工作中，我们希望将VLP应用于更多的下游任务，如文本-图像对齐和视觉对话。在方法学上，我们希望看到如何将多任务微调应用于我们的框架中，以减轻不同目标之间的干扰。
+
+      \newpage
+      \section{Construction}
+
+      %\subsection{BertSelfAttention}
+      % \begin{lstlisting}
+      %       class BertSelfAttention(nn.Module):
+      %             def __init__(self, config):
+      %                   super(BertSelfAttention, self).__init__()
+
+      %                   self.query = nn.Linear(config.hidden_size, self.all_head_size)
+      %                   self.key = nn.Linear(config.hidden_size, self.all_head_size)
+      %                   self.value = nn.Linear(config.hidden_size, self.all_head_size)
+
+      %                   self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+
+      %             def transpose_for_scores(self, x):
+      %                   new_x_shape = x.size()[
+      %                   :-1] + (self.num_attention_heads, self.attention_head_size)
+      %                   x = x.view(*new_x_shape)
+      %                   return x.permute(0, 2, 1, 3)
+
+      %             def forward(self, hidden_states, attention_mask, history_states=None):
+      %                   #只保留了部分代码
+      %                   mixed_query_layer = self.query(hidden_states)
+      %                   mixed_key_layer = self.key(hidden_states)
+      %                   mixed_value_layer = self.value(hidden_states)
+
+      %                   query_layer = self.transpose_for_scores(mixed_query_layer)
+      %                   key_layer = self.transpose_for_scores(mixed_key_layer)
+      %                   value_layer = self.transpose_for_scores(mixed_value_layer)
+
+      %                   # Take the dot product between "query" and "key" to get the raw attention scores.
+      %                   attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+
+      %                   attention_scores = attention_scores /math.sqrt(self.attention_head_size)
+
+      %                   # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
+      %                   attention_scores = attention_scores + attention_mask
+
+      %                   # Normalize the attention scores to probabilities.
+      %                   attention_probs = nn.Softmax(dim=-1)(attention_scores)
+
+      %                   # This is actually dropping out entire tokens to attend to, which might
+      %                   # seem a bit unusual, but is taken from the original Transformer paper.
+      %                   attention_probs = self.dropout(attention_probs)
+
+      %                   context_layer = torch.matmul(attention_probs, value_layer)
+      %                   context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+      %                   new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+      %                   context_layer = context_layer.view(*new_context_layer_shape)
+      %                   return context_layer
+      %       \end{lstlisting}
+
+      \begin{figure}[H]
+            \centering
+            \begin{minipage}{0.49\linewidth}
+                  \centering
+                  \includegraphics[width=3.15in,height=3.0in]{BertOutput}
+                  \caption{BertSelfOutput}
+                  \label{BertSelfOutput}%文中引用该图片代号
+            \end{minipage}
+            %\qquad
+            \begin{minipage}{0.49\linewidth}
+                  \centering
+                  \includegraphics[width=3.15in,height=3.0in]{BertAttention}
+                  \caption{BertAttention}
+                  \label{BertAttention}%文中引用该图片代号
+            \end{minipage}
+
+      \end{figure}
+
+      \begin{figure}[H]
+            \centering
+            \begin{minipage}{0.49\linewidth}
+                  \centering
+                  \includegraphics[width=3.15in,height=3.0in]{BertIntermediate}
+                  \caption{BertIntermediate}
+                  \label{BertIntermediate}%文中引用该图片代号
+            \end{minipage}
+            %\qquad
+            \begin{minipage}{0.49\linewidth}
+                  \centering
+                  \includegraphics[width=3.15in,height=3.0in]{BertLayer}
+                  \caption{BertLayer}
+                  \label{BertLayer}%文中引用该图片代号
+            \end{minipage}
+
+      \end{figure}
+
+      \begin{figure}[H]
+            \centering
+            \includegraphics[width=6.5in,height=5.0in]{Bert4S2SDecoder.png}
+
+            %\caption{Bert4S2SDecoder,生成过程由next_pos < output_length:该语句控制，没体现出来STOP标记的作用}
+            \caption{Bert4S2SDecoder, 生成过程由 next\_pos \textless output\_length: 该语句控制，没体现出来 STOP 标记的作用}
+
+            \label{Bert4S2SDecoder}
+            %\caption{整个过程是由\textbf{while next_pos < output_length}控制的,没体现出来到\textbf{STOP}标记停止生成}
+      \end{figure}
+
+
+      % \subsection{BertOutput}
+
+      % \begin{figure}[H]
+      %       \centering
+      %       \label{BertOutput}
+      %       \includegraphics{BertOutput}
+      %       \caption{BertOutput}
+      % \end{figure}
+
+
+      % \subsection{BertAttention}
+      % \begin{figure}[H]
+      %       \centering
+      %       \label{BertAttention}
+      %       \includegraphics{BertAttention}
+      %       \caption{BertAttention}
+      % \end{figure}
+
+
+      % \subsection{BertIntermediate}
+      % \begin{figure}[H]
+      %       \centering
+      %       \label{BertIntermediate}
+      %       \includegraphics{BertIntermediate}
+      %       \caption{BertIntermediate}
+      % \end{figure}
+
+      % \subsection{BertLayer}
+      % \begin{figure}[H]
+      %       \centering
+      %       \label{BertLayer}
+      %       \includegraphics{BertLayer}
+      %       \caption{BertLayer}
+      % \end{figure}
 
       \section{Self-Attention}
 
@@ -424,7 +534,11 @@
 
       $softmax(xx^T)$用来分配权重，看某个向量(单词)与其他维度(包括自己)的相关性强弱
 
-      $softmax(xx^T)x$每个词的权重向量与所有词向量做内积
+      $softmax(xx^T)x$每个词的权重向量与所有词向量做内积，代表其他词向量对自身的影响(修正)
+
+      $x$:从语料库中得到的词向量，是客观的
+
+      $softmax(xx^T)x$:代表了上下文对每个词的修正
 
       再次回到QKV，
       $$
@@ -443,6 +557,25 @@
             \label{Transformer}
       \end{figure}
 
+      Tokenizer和One hot都是对基础语义单元进行编码(数字化),并能体现一定语义关系
+
+      \begin{itemize}
+            \item Tokenizer给不同token分配唯一的id
+
+                  全部token都在一维空间中表示,信息密度过于密集，语义关系表征困难
+            \item One hot用二进制的每一位对应一个token
+
+                  有多少token就有多少维度，信息密度过于稀疏，所有token之间都是正交的
+      \end{itemize}
+
+      空间变换$act2fun(X^TM+b)$:旋转拉伸+平移
+
+      为什么涉及到维度的变换？因为在低维空间，不好把空间中的元素划分，但是升到高维，即使用简单的模型也能划分他们
+
+      隐藏层可以代表对数据的抽象程度
+
+      对独热向量进行降维，降维后可能每个维度的值都代表一定的语义
+
       \subsection{Input}
       输入是一个序列数据,可以是任意形式的词向量,但是要给每个Input Embedding层后面加上位置编码,《Attention Is All You Need》中，使用的是正余弦位置编码
       \begin{gather}
@@ -454,6 +587,9 @@
 
       选择将词向量和位置向量直接相加，而不是拼接，因为拼接的话是词向量维度翻倍
 
+      加法是对词向量在空间中做平移操作
+
+      为什么不选择乘法：位置对词向量影响可能盖过词向量本身
 
       \subsection{Enc}
       \newpage
@@ -466,6 +602,7 @@
       \end{figure}
       输入的特征首先由多头机制分为多个不同的向量块，每个头负责一个向量块，每个向量块经由Self-Attention层形成一个score向量,然后再把多个头得到的scores向量拼接为与原来等大的向量，再与输入向量相加，防止神经网络退化问题，再经由一个LayerNorm与Feed Forward层，并接着引入残差，最终得到输出
 
+      多头，每个头的输出相当于一个通道？
 
       \subsubsection{ResNet}
 
